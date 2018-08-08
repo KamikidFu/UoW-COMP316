@@ -1,0 +1,468 @@
+(ns as2.core
+  (:gen-class)
+  (:require [clojure.java.io :as io])
+  (:require [clojure.string :as string])
+)
+
+;============================================================================================================================
+;PART1
+;============================================================================================================================
+
+(defn read-line-by-line [filename]
+    (with-open [reader (io/reader filename)] ;open file with reader of clojure.java.io
+        (into [] (line-seq reader)) ;read a line from buffer as lazy sequence and put into list
+    )
+)
+;(read-line-by-line "map1.txt")
+
+(defn format-map [raw-map]
+  (loop [processing-map raw-map
+         formatted-map []]
+    (if (empty? processing-map)
+      formatted-map
+      (recur (rest processing-map)
+             (conj formatted-map (into [] (string/replace (first processing-map) #" " "-")))
+      )
+    )
+  )
+)
+;(format-map (read-line-by-line "map1.txt"))
+
+(defn find-item-s-pos [game-map in-game-element]
+  (let [formatted-map game-map
+        n (count (first formatted-map))
+        i (.indexOf (flatten formatted-map) in-game-element)]
+    (if (pos? i)
+      (vector (quot i n) (mod i n)))
+  )
+)
+
+
+(defn read-map-from-file [filename]
+  (let [formatted-map (format-map (read-line-by-line filename))]
+    {
+      :map formatted-map
+      :path []
+      :start-pos (find-item-s-pos formatted-map \S)
+      :goal-pos (find-item-s-pos formatted-map \G)
+    }
+  )
+)
+;(read-map-from-file "map.txt")
+
+;(defn get-start-pos [state]
+;  (let [{current-state :map}state
+;        count-items-in-line (count (first current-state))
+;        index-start (.indexOf (lazy-seq (apply str (flatten current-state))) \S)]
+;    (if (pos? index-start)
+;      (vector (quot index-start count-items-in-line) (mod index-start count-items-in-line)))
+;  )
+;)
+;(start (read-map-from-file "map1.txt"))
+
+(defn ship-visit [state-map pos]
+  (let [x-pos (first pos)
+        y-pos (second pos)]
+      (if (= (get-in state-map [x-pos y-pos]) \G)
+        (assoc-in state-map [x-pos y-pos] \G)
+        (assoc-in state-map [x-pos y-pos] \*)
+      )
+  )
+)
+;(ship-visit [[\X \S \X \- \X] [\X \- \- \- \X] [\X \X \- \G \X]] [2 3])
+
+(defn shift-pos [path pos]
+  (let [x-pos (first pos)
+        y-pos (second pos)]
+        (case path
+           :n (vector (dec x-pos) y-pos)
+           :s (vector (inc x-pos) y-pos)
+           :w (vector x-pos (dec y-pos))
+           :e (vector x-pos (inc y-pos))
+        )
+   )
+)
+;(shift-pos :n [1 1])
+;(shift-pos :s [1 1])
+;(shift-pos :w [1 1])
+;(shift-pos :e [1 1])
+
+(defn update-map [state]
+ (let [{current-map :map current-path :path start-pos :start-pos}state]
+    (loop [processing-map current-map
+           processing-path current-path
+           processing-pos start-pos]
+      (if (empty? processing-path)
+        processing-map
+        (recur (ship-visit processing-map (vector (first (shift-pos (first processing-path) processing-pos))
+                                                  (second (shift-pos (first processing-path) processing-pos))))
+               (rest processing-path)
+               (shift-pos (first processing-path) processing-pos)
+        )
+      )
+    )
+ )
+)
+;(update-map {:map [[\X \S \X \- \X] [\X \- \- \- \X] [\X \- \- \- \X] [\X \X \- \- \X] [\X \X \- \G \X]], :path [:s], :start-pos [0 1], :goal-pos [4 3]})
+;(update-map my-init-state)
+;(def my-init-state {:map [[\X \S \X \- \X][\X \- \- \- \X][\X \- \- \- \X][\X \X \- \- \X][\X \X \- \G \X]], :path [:s :s], :start-pos [0 1], :goal-pos [4 3]})
+;(def my-new-state (update-state my-init-state :n))
+;(update-map (read-map-from-file "map1.txt"))
+
+(defn print-state [state]
+    (loop [ready-to-print (update-map state)]
+      (if-not (= (first ready-to-print) nil)
+        (println (first ready-to-print))
+      )
+      (if (empty? ready-to-print)
+        :PRINTED
+        (recur (rest ready-to-print))
+      )
+    )
+)
+;(print-state (read-map-from-file "map1.txt"))
+
+(defn position [state]
+  (let [{start-pos :start-pos current-path :path}state]
+    (loop [processing-path current-path
+           processing-pos start-pos]
+      (if (empty? processing-path)
+        processing-pos
+        (recur (rest processing-path)
+               (shift-pos (first processing-path) processing-pos)
+        )
+      )
+    )
+  )
+)
+;(position my-init-state)
+
+(defn goal? [state]
+  (let [{goal-pos :goal-pos}state
+        current-pos (position state)]
+    (= current-pos goal-pos)
+  )
+)
+;(goal? (read-map-from-file "map1.txt"))
+
+(defn cost [state]
+  (let [{paths :path}state]
+    (count paths)
+  )
+)
+;(cost (read-map-from-file "map.txt"))
+
+(defn heuristic [state]
+  (let [{goal-pos :goal-pos}state
+        ship-pos (position state)
+        goal-x (first goal-pos)
+        goal-y (second goal-pos)
+        ship-x (first ship-pos)
+        ship-y (second ship-pos)
+        delta-x (- goal-x ship-x)
+        delta-y (- goal-y ship-y)]
+    (Math/sqrt (+ (* delta-x delta-x)(* delta-y delta-y)))
+  )
+)
+;(heuristic (read-map-from-file "map1.txt"))
+
+(defn get-item-at-pos [state pos]
+  (let [{state-map :map}state
+        x (first pos)
+        y (second pos)]
+    (get-in state-map [x y])
+  )
+)
+;(get-item-at-pos (read-map-from-file "map1.txt") '(0 0))
+
+(defn update-state [state adding-path]
+  (let [{current-path :path}state
+        returning-state (assoc state :path (conj current-path adding-path))]
+    (assoc returning-state :map (update-map returning-state))
+  )
+)
+;(update-state (read-map-from-file "map.txt")  :s)
+
+;(defn expand [state]
+;  (let [current-pos (position state)
+;        current-north  [(dec (first current-pos))  (second current-pos)]
+;        current-south [(inc (first current-pos)) (second current-pos)]
+;        current-east [(first current-pos) (inc (second current-pos))]
+;        current-west [ (first current-pos) (dec (second current-pos))]]
+;    (loop [movement-set [current-north current-south current-east current-west]
+;           movement-flag [:n :s :e :w]
+;           returning-states '()]
+;      (if (empty? movement-set)
+;        returning-states
+;        (recur (rest movement-set)
+;               (rest movement-flag)
+;               (if (or (= (get-item-at-pos state (first movement-set)) \-) (= (get-item-at-pos state (first movement-set)) \G))
+;                 (conj returning-states (update-state state (first movement-flag)))
+;                 returning-states
+;               )
+;        )
+;      )
+;    )
+;  )
+;)
+;(read-map-from-file "map1.txt")
+
+(defn expand [state]
+  (let [updated-state (assoc state :map (update-map state))
+        current-pos (position updated-state)
+        current-north  [(dec (first current-pos))  (second current-pos)]
+        current-south [(inc (first current-pos)) (second current-pos)]
+        current-east [(first current-pos) (inc (second current-pos))]
+        current-west [ (first current-pos) (dec (second current-pos))]]
+    (loop [movement-set [current-north current-south current-east current-west]
+           movement-flag [:n :s :e :w]
+           returning-states '()]
+      (if (empty? movement-set)
+        returning-states
+        (recur (rest movement-set)
+               (rest movement-flag)
+               (let [icon (get-item-at-pos updated-state (first movement-set))]
+                 (if  (or (= icon \-) (= icon \G))
+                   (conj returning-states (update-state updated-state (first movement-flag)))
+                   returning-states
+                 )
+               )
+        )
+      )
+    )
+  )
+)
+;(expand (read-map-from-file "expand_0d.txt"))
+;(expand (read-map-from-file "expand_1d_0.txt"))
+;(expand (read-map-from-file "expand_1d_1.txt"))
+;(expand (read-map-from-file "expand_1d_2.txt"))
+;(expand (read-map-from-file "expand_1d_3.txt"))
+;(expand (read-map-from-file "expand_2d_0.txt"))
+;(expand (read-map-from-file "expand_2d_1.txt"))
+;(expand (read-map-from-file "expand_2d_2.txt"))
+;(expand (read-map-from-file "expand_2d_3.txt"))
+;(expand (read-map-from-file "expand_3d_0.txt"))
+;(expand (read-map-from-file "expand_3d_1.txt"))
+;(expand (read-map-from-file "expand_3d_2.txt"))
+;(expand (read-map-from-file "expand_3d_3.txt"))
+;(expand (read-map-from-file "expand_4d.txt"))
+
+
+;(def my-expand-test {:map
+;              [[\+ \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \+]
+;               [\| \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \|]
+;               [\| \- \- \- \- \- \- \- \- \X \X \X \X \X \X \- \- \- \- \- \- \- \X \- \- \- \- \- \- \- \- \- \|]
+;               [\| \- \- \- \- \- \- \- \- \- \X \X \X \X \X \X \X \- \- \- \- \- \X \X \- \- \- \- \- \- \- \- \|]
+;               [\| \- \- \- \- \- \- \- \- \- \- \- \- \X \X \X \X \- \- \- \- \- \X \G \- \- \- \- \- \- \- \- \|]
+;               [\| \- \- \- \- \- \- \- \- \- \- \- \- \X \X \X \X \- \- \- \- \- \X \X \X \X \- \- \- \- \- \- \|]
+;               [\| \- \- \- \X \X \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \* \* \X \X \X \- \- \- \- \- \- \|]
+;               [\| \- \- \- \X \X \X \- \- \- \- \- \- \- \- \- \- \- \* \* \* \* \- \- \- \- \- \- \- \- \- \- \|]
+;               [\| \- \- \- \- \X \X \S \* \* \* \* \* \* \* \* \* \* \* \X \X \X \X \X \X \X \- \- \- \- \- \- \|]
+;               [\| \- \- \- \X \X \X \X \X \X \- \- \- \- \- \- \- \X \X \X \- \- \- \- \- \X \- \- \- \- \- \- \|]
+;               [\| \- \- \- \- \X \X \X \- \X \X \X \X \X \X \X \X \X \- \- \- \- \- \- \- \X \X \- \- \- \- \- \|]
+;               [\| \- \- \- \- \- \- \- \- \- \X \X \X \X \X \X \- \- \- \- \- \- \- \- \- \- \X \- \- \- \- \- \|]
+;               [\| \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \|]
+;               [\+ \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \- \+]],
+;         :path [:e :e :e :e :e :e :e :e :e :e :e :n :e :e :e :n :e],
+;         :start-pos [8 7],
+;         :goal-pos [4 23]})
+;(expand my-expand-test)
+;(def my-dead-end {:map [[\X \X \X][\X \S \X][\X \X \X][\X \G \X]],
+;                  :path [],
+;                  :start-pos [1 1]
+;                  :goal-pos [3 1]})
+;(expand my-dead-end)
+
+;(read-map-from-file "deadend.txt")
+
+;(expand (first (expand (first (expand (first (expand (read-map-from-file "map1.txt"))))))))
+;(expand (read-map-from-file "map.txt"))
+
+;============================================================================================================================
+;PART2
+;============================================================================================================================
+(def verbose true)
+
+(defn best-first-formatter [state]
+  (if (= :map (first (first state)))
+    {:state state :val (heuristic state)}
+    (loop [processing-states state
+           returning-formatted []]
+      (if (empty? processing-states)
+        returning-formatted
+        (recur (rest processing-states)
+               (conj returning-formatted {:state (first processing-states) :val (heuristic (first processing-states))})
+        )
+      )
+    )
+  )
+)
+;(best-first-formatter (expand (first (expand (first (expand (first (expand (read-map-from-file "map1.txt")))))))))
+;(sort-by :val (best-first-formatter (expand (first (expand (first (expand (first (expand (read-map-from-file "map1.txt"))))))))))
+;(read-map-from-file "mini.txt")
+;(best-first-formatter (read-map-from-file "mini.txt"))
+
+;(defn get-frontier [states]
+;  (let [{related-state :state minimun-value :val}(first states)]
+;    (loop [processing-states (rest states)
+;           returning-frontier (first states)]
+;      (if (empty? processing-states)
+;        returning-frontier
+;        (recur (rest processing-states)
+;               (let [{current-state :state current-value :val}(first processing-states)]
+;                 (if (< current-value minimun-value)
+;                   {:state current-state :val current-value}
+;                   returning-frontier
+;                 )
+;               )
+;        )
+;      )
+;    )
+;  )
+;)
+;(get-frontier (best-first-formatter (expand (first (expand (first (expand (first (expand (read-map-from-file "map1.txt"))))))))))
+;(get-frontier (best-first-formatter [(read-map-from-file "mini.txt")]))
+
+;(defn best-first [filename]
+;  (let [state-map (read-map-from-file filename)
+;        start-node {:state state-map :val (heuri-stic state-map)}]
+;    (loop [processing-frontier start-node]
+;      (let [{current-state :state} processing-frontier]
+;        (if (goal? current-state)
+;          processing-frontier
+;          (recur (get-frontier (best-first-formatter (expand current-state))))
+;        )
+;      )
+;    )
+;  )
+;)
+
+
+;(defn best-first [filename]
+;  (let [init-map (read-map-from-file filename)
+;        start-node {:state init-map :val (heuristic init-map)}]
+;    (loop [processing-frontier start-node
+;           expanded-frontiers (sort-by :val (best-first-formatter (expand init-map)))]
+;      (let [{current-state :state} processing-frontier]
+;        (print-state current-state)
+;        (println)
+;        (if (goal? current-state)
+;          processing-frontier
+;          (recur (let [temp-frontier (first expanded-frontiers)
+;                        {temp-state :state temp-val :val}temp-frontier]
+;                    (if (empty? (expand temp-state))
+;                      (let [candidate-frontier (second expanded-frontiers)
+;                            {candidate-state :state candidate-val :val}candidate-frontier]
+;                        (if (= temp-val candidate-val)
+;                          candidate-frontier
+;                          temp-frontier
+;                        )
+;                      )
+;                      temp-frontier
+;                    )
+;                  )
+;                 (sort-by :val (best-first-formatter (expand current-state)))
+;          )
+;        )
+;      )
+;    )
+;  )
+;)
+
+(defn best-first [filename]
+  (let [init-map (read-map-from-file filename)
+        start-node {:state init-map :val (heuristic init-map)}]
+    (loop [processing-frontier start-node
+           candidate-frontiers (sort-by :val (best-first-formatter (expand init-map)))]
+      (let [{current-state :state} processing-frontier]
+	(println current-val)
+	(println (position current-state))
+        (if (goal? current-state)
+          processing-frontier
+          (recur (first candidate-frontiers)
+                 (sort-by :val  (distinct (concat (rest candidate-frontiers) (best-first-formatter (expand current-state)))))
+          )
+        )
+      )
+    )
+  )
+)
+
+;(read-map-from-file "tricky.txt")
+
+;(best-first "larger-mini.txt")
+;(let [{state :state}(best-first "mini.txt")]
+;  (print-state state)
+;)
+;(let [{state :state}(best-first "map.txt")]
+;  (print-state state)
+;)
+;(let [{state :state}(best-first "map1.txt")]
+;  (print-state state)
+;)
+;(let [{state :state}(best-first "map2.txt")]
+;  (print-state state)
+;)
+
+(defn a-star-calculate-val [state]
+  (let [{state-path :path}state]
+    (+ (count state-path) (heuristic state))
+  )
+)
+
+(defn a-star-formatter [state]
+  (if (= :map (first (first state)))
+    {:state state :val (a-star-calculate-val state)}
+    (loop [processing-states state
+           returning-formatted []]
+      (if (empty? processing-states)
+        returning-formatted
+        (recur (rest processing-states)
+               (conj returning-formatted {:state (first processing-states) :val (a-star-calculate-val (first processing-states))})
+        )
+      )
+    )
+  )
+)
+
+(defn a-star [filename]
+  (let [init-map (read-map-from-file filename)
+        start-node {:state init-map :val (a-star-calculate-val init-map)}]
+    (loop [processing-frontier start-node
+           candidate-frontiers (sort-by :val (a-star-formatter (expand init-map)))]
+      (let [{current-state :state current-val :val}processing-frontier]
+	(println current-val)
+	(println (position current-state))
+        (if (goal? current-state)
+          processing-frontier
+          (recur (first candidate-frontiers)
+                 (sort-by :val (distinct (concat (rest candidate-frontiers) (a-star-formatter (expand current-state)))))
+          )
+        )
+      )
+    )
+  )
+)
+;(a-star "mini.txt")
+;(a-star "map.txt")
+;(a-star "map1.txt")
+
+;(let [{state :state}(a-star "mini.txt")]
+;  (print-state state)
+;)
+;(let [{state :state}(a-star "map.txt")]
+;  (print-state state)
+;)
+;(let [{state :state}(a-star "map1.txt")]
+;  (print-state state)
+;)
+;(let [{state :state}(a-star "map2.txt")]
+;  (print-state state)
+;)
+
+
+(defn -main
+  "I don't do a whole lot ... yet."
+  [& args]
+  (println "Hello, World!")
+)

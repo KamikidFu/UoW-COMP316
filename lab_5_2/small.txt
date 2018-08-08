@@ -1,0 +1,12 @@
+[
+[:N :Y :Y :Y :Y :N :Y :Y :Y :Y :Y :N :Y :Y :N :N :Y :N :N :Y :Y :N :N :N :N :N :Y :Y :Y :N :TUMOUR-YES]
+[:Y :Y :N :Y :N :Y :N :N :N :Y :N :Y :Y :N :N :N :N :Y :Y :N :N :N :Y :N :Y :Y :Y :Y :Y :Y :TUMOUR-YES]
+[:Y :N :Y :Y :N :N :N :Y :N :Y :N :Y :Y :Y :Y :N :N :Y :Y :N :N :N :N :N :Y :N :N :N :Y :N :TUMOUR-NO]
+[:N :Y :N :Y :Y :Y :N :N :N :Y :Y :N :Y :N :Y :Y :Y :N :Y :Y :N :N :N :N :Y :N :N :Y :Y :N :TUMOUR-YES]
+[:N :Y :N :N :N :N :N :N :Y :Y :N :Y :N :Y :N :N :Y :N :Y :N :N :Y :Y :N :N :N :Y :Y :N :N :TUMOUR-NO]
+[:Y :Y :N :Y :N :N :N :N :N :Y :N :Y :N :N :Y :N :N :N :N :Y :Y :Y :N :N :N :Y :Y :Y :N :N :TUMOUR-NO]
+[:N :Y :Y :Y :Y :Y :Y :N :N :Y :Y :Y :Y :N :Y :Y :Y :Y :N :Y :N :N :N :N :Y :N :N :N :N :Y :TUMOUR-YES]
+[:N :Y :Y :Y :N :N :Y :Y :Y :Y :Y :N :Y :N :N :Y :Y :Y :N :N :N :Y :N :Y :N :Y :N :N :Y :N :TUMOUR-YES]
+[:N :N :N :N :Y :N :N :N :Y :N :Y :Y :Y :Y :N :Y :N :N :Y :Y :Y :Y :N :Y :Y :Y :Y :N :Y :Y :TUMOUR-NO]
+[:N :N :N :Y :Y :Y :Y :N :N :Y :Y :Y :Y :N :Y :N :N :Y :N :Y :Y :N :N :N :N :Y :N :N :Y :Y :TUMOUR-NO]
+]

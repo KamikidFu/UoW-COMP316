@@ -1,0 +1,1107 @@
+<<<<<<< HEAD
+(ns as3.core
+  (:gen-class)
+  ;Import java library
+  (:import [java.awt.image BufferedImage])
+  (:import [javax.imageio ImageIO])
+  (:import [java.io File])
+)
+
+;;A simple method to reload the project in the repl
+(defn reload []
+  (use 'as3.core :reload)
+  :RELOADED!
+)
+
+;;Store all the kirsh-filters in a variable
+(def kirsh-filters [
+                     [[-1 0 1][-2 0 2][-1 0 1]]
+                     [[-2 -1 0][-1 0 1][0 1 2]]
+                     [[-1 -2 -1][0 0 0][1 2 1]]
+                     [[0 -1 -2][1 0 -1][2 1 0]]
+                     [[1 0 -1][2 0 -2][1 0 -1]]
+                     [[2 1 0][1 0 -1][0 -1 -2]]
+                     [[1 2 1][0 0 0][-1 -2 -1]]
+                     [[0 1 2][-1 0 1][-2 -1 0]]
+                   ])
+
+;;=======================================================================================
+;;These code are retrived from image-explame project on moodle.
+;;Some of the code got some changes to fit this assignment.
+;;=======================================================================================
+;;new-image function uses BufferedImage to generate a new image with defined width height
+(defn new-image [width height]
+  (BufferedImage. width height BufferedImage/TYPE_INT_RGB)
+)
+
+;;get-width function uses library class function to get width of image
+(defn get-width [image]
+  (.getWidth image)
+)
+
+;;get-height function does a similar thing as get-width
+(defn get-height [image]
+  (.getHeight image)
+)
+
+;;read-image uses image io to read image file
+(defn read-image [filename]
+  (let [file (File. filename)]
+    (ImageIO/read file)
+  )
+)
+
+;;save-image is for research use
+(defn save-image [image extension filename]
+  (let [file (File. filename)]
+    (ImageIO/write image extension file)
+  )
+)
+
+;;get-rgb use image and x y position
+(defn get-rgb [image x y]
+  (if (and (and (and (> x 0) (> y 0)) (< x (get-width image))) (< y (get-height image)))
+    (let [rgb (.getRGB image x y)
+          red (bit-shift-right (bit-and rgb 0xFF0000) 16)
+          blue (bit-shift-right (bit-and rgb 0xFF00) 8)
+          green (bit-and rgb 0xFF)]
+      (vec (list red green blue))
+    )
+    nil
+  )
+)
+
+;;get-grey needs to get-rgb first and then convert to grey intensity
+(defn get-grey [image x y]
+  "Use average method to calculate greyscale"
+  (let [rgb (get-rgb image x y)]
+    (if (not (nil? rgb))
+      (int (/ ( reduce + rgb ) 3.0))
+      nil
+    )
+  )
+)
+
+;;===============================================================================
+;;This part is mainly for assignment.
+;;===============================================================================
+
+;;====================================
+;;Part 1
+;;====================================
+;;kirsh filter operation on point
+(defn kirsh-filter-po [ori-image re-image k-filter x y]
+  ;;grey-matrix is a vector of intensity of pixel and 8 other pixels around it
+  (let [grey-matrix [(get-grey ori-image (- x 1) (- y 1))
+                     (get-grey ori-image x (- y 1))
+                     (get-grey ori-image (+ x 1) (- y 1))
+                     (get-grey ori-image (- x 1) y)
+                     (get-grey ori-image x y)
+                     (get-grey ori-image (+ x 1) y)
+                     (get-grey ori-image (- x 1) (+ y 1))
+                     (get-grey ori-image x (+ y 1))
+                     (get-grey ori-image (+ x 1) (+ y 1))]
+        ;;calculate the filter applied grey value
+        greyscale (+ 127 (two-vec-muladd grey-matrix (flatten k-filter)))]
+    ;;Clampping grey value
+    (cond
+      (< greyscale 0) (set-grey re-image x y 0)
+      (> greyscale 255) (set-grey re-image x y 255)
+      :else (set-grey re-image x y greyscale)
+    )
+    ;;return image
+    re-image
+  )
+)
+;;kirsh-filter is a method of nested looping different pixel
+(defn kirsh-filter [image k-filter]
+  (let [return-image (new-image (get-width image) (get-height image))]
+    (dotimes [x (get-width image)]
+      (dotimes [y (get-height image)]
+        (kirsh-filter-po image return-image k-filter x y)
+      )
+    )
+    return-image
+  )
+)
+;;kirsh is required method to apply kirsh filter
+(defn kirsh [file i]
+  (let [image (read-image file)]
+    (kirsh-filter image (nth kirsh-filters i))
+  )
+)
+
+;;====================================
+;;Part 2
+;;====================================
+;;mag-po is a point operation of edge magnitude
+(defn mag-po [ori-image x y]
+  ;;grey-matrix is a vector of intensity of pixel and 8 other pixels around it
+  (let [grey-matrix [(get-grey ori-image (- x 1) (- y 1))
+                     (get-grey ori-image x (- y 1))
+                     (get-grey ori-image (+ x 1) (- y 1))
+                     (get-grey ori-image (- x 1) y)
+                     (get-grey ori-image x y)
+                     (get-grey ori-image (+ x 1) y)
+                     (get-grey ori-image (- x 1) (+ y 1))
+                     (get-grey ori-image x (+ y 1))
+                     (get-grey ori-image (+ x 1) (+ y 1))]]
+    ;;loop to get the max value of pixels
+    (loop [results []
+           processing-vec kirsh-filters]
+      (if (empty? processing-vec)
+        (cond
+          ;;do clampping when it is out of 8 bits
+          (< (apply max results) 0) 0
+          (> (apply max results) 255) 255
+          :else (apply max results)
+        )
+        (recur
+               (conj results (+ 127 (two-vec-muladd grey-matrix (flatten (first processing-vec)))))
+               (rest processing-vec)
+        )
+      )
+    )
+  )
+)
+;;dir-po is a point operation of edge direction
+(defn dir-po [ori-image x y]
+  ;;grey-matrix is a vector of intensity of pixel and 8 other pixels around it
+  (let [grey-matrix [(get-grey ori-image (- x 1) (- y 1))
+                     (get-grey ori-image x (- y 1))
+                     (get-grey ori-image (+ x 1) (- y 1))
+                     (get-grey ori-image (- x 1) y)
+                     (get-grey ori-image x y)
+                     (get-grey ori-image (+ x 1) y)
+                     (get-grey ori-image (- x 1) (+ y 1))
+                     (get-grey ori-image x (+ y 1))
+                     (get-grey ori-image (+ x 1) (+ y 1))]]
+    ;;loop to get the filter no. of max value
+    (loop [results []
+           processing-vec kirsh-filters]
+      (if (empty? processing-vec)
+        ;;get the filter index
+        (.indexOf results (apply max results))
+        (recur
+               (conj results (+ 127 (two-vec-muladd grey-matrix (flatten (first processing-vec)))))
+               (rest processing-vec)
+        )
+      )
+    )
+  )
+)
+
+;;edge-magnitude-hist is a required method
+;;this method is going to generate a histogram
+(defn edge-magnitude-hist [filename]
+  ;;read the image first and then using atom to record any number changes
+  (let [
+        image (read-image filename)
+        v0 (atom 0.0)
+        v1 (atom 0.0)
+        v2 (atom 0.0)
+        v3 (atom 0.0)
+        v4 (atom 0.0)
+        v5 (atom 0.0)
+        v6 (atom 0.0)
+        v7 (atom 0.0)]
+    ;;nested looping though all pixels
+    (dotimes [x (get-width image)]
+      (dotimes [y (get-height image)]
+       (let [current-counting (int (/ (mag-po image x y) 32))]
+         (case current-counting
+           0 (swap! v0 inc)
+           1 (swap! v1 inc)
+           2 (swap! v2 inc)
+           3 (swap! v3 inc)
+           4 (swap! v4 inc)
+           5 (swap! v5 inc)
+           6 (swap! v6 inc)
+           7 (swap! v7 inc)
+         )
+       )
+      )
+    )
+    ;;return a hash map of histogram
+    (let [total-pixels (+ @v0 @v1 @v2 @v3 @v4 @v5 @v6 @v7)]
+      {:0-31 (Double. (format "%.2f" (/ @v0 total-pixels)))
+       :32-63 (Double. (format "%.2f" (/ @v1 total-pixels)))
+       :64-95 (Double. (format "%.2f" (/ @v2 total-pixels)))
+       :96-127 (Double. (format "%.2f" (/ @v3 total-pixels)))
+       :128-159 (Double. (format "%.2f" (/ @v4 total-pixels)))
+       :160-191 (Double. (format "%.2f" (/ @v5 total-pixels)))
+       :192-223 (Double. (format "%.2f" (/ @v6 total-pixels)))
+       :224-255 (Double. (format "%.2f" (/ @v7 total-pixels)))}
+    )
+  )
+)
+
+;;edge-direction-hist is similar to edge-magnitude-hist
+(defn edge-direction-hist [filename]
+  (let [image (read-image filename)
+        v0 (atom 0.0)
+        v1 (atom 0.0)
+        v2 (atom 0.0)
+        v3 (atom 0.0)
+        v4 (atom 0.0)
+        v5 (atom 0.0)
+        v6 (atom 0.0)
+        v7 (atom 0.0)]
+    (dotimes [x (get-width image)]
+      (dotimes [y (get-height image)]
+       (let [current-counting (dir-po image x y)]
+         (case current-counting
+           0 (swap! v0 inc)
+           1 (swap! v1 inc)
+           2 (swap! v2 inc)
+           3 (swap! v3 inc)
+           4 (swap! v4 inc)
+           5 (swap! v5 inc)
+           6 (swap! v6 inc)
+           7 (swap! v7 inc)
+         )
+       )
+      )
+    )
+    (let [total-pixels (+ @v0 @v1 @v2 @v3 @v4 @v5 @v6 @v7)]
+      {:0 (Double. (format "%.2f" (/ @v0 total-pixels)))
+       :1 (Double. (format "%.2f" (/ @v1 total-pixels)))
+       :2 (Double. (format "%.2f" (/ @v2 total-pixels)))
+       :3 (Double. (format "%.2f" (/ @v3 total-pixels)))
+       :4 (Double. (format "%.2f" (/ @v4 total-pixels)))
+       :5 (Double. (format "%.2f" (/ @v5 total-pixels)))
+       :6 (Double. (format "%.2f" (/ @v6 total-pixels)))
+       :7 (Double. (format "%.2f" (/ @v7 total-pixels)))}
+    )
+  )
+)
+
+
+;;====================================
+;;Part 3
+;;====================================
+
+(defn intensity-hist [filename]
+  (let [image (read-image filename)
+        v0 (atom 0.0)
+        v1 (atom 0.0)
+        v2 (atom 0.0)
+        v3 (atom 0.0)
+        v4 (atom 0.0)
+        v5 (atom 0.0)
+        v6 (atom 0.0)
+        v7 (atom 0.0)]
+    (dotimes [x (get-width image)]
+      (dotimes [y (get-height image)]
+        (let [current-counting (if-not (nil? (get-grey image x y))
+                                 (int (/ (get-grey image x y) 32))
+                                 -1
+                                )]
+          (case current-counting
+            0 (swap! v0 inc)
+            1 (swap! v1 inc)
+            2 (swap! v2 inc)
+            3 (swap! v3 inc)
+            4 (swap! v4 inc)
+            5 (swap! v5 inc)
+            6 (swap! v6 inc)
+            7 (swap! v7 inc)
+            -1
+          )
+        )
+      )
+    )
+    (let [total-pixels (+ @v0 @v1 @v2 @v3 @v4 @v5 @v6 @v7)]
+      {:0-31 (Double. (format "%.2f" (/ @v0 total-pixels)))
+       :32-63 (Double. (format "%.2f" (/ @v1 total-pixels)))
+       :64-95 (Double. (format "%.2f" (/ @v2 total-pixels)))
+       :96-127 (Double. (format "%.2f" (/ @v3 total-pixels)))
+       :128-159 (Double. (format "%.2f" (/ @v4 total-pixels)))
+       :160-191 (Double. (format "%.2f" (/ @v5 total-pixels)))
+       :192-223 (Double. (format "%.2f" (/ @v6 total-pixels)))
+       :224-255 (Double. (format "%.2f" (/ @v7 total-pixels)))}
+    )
+  )
+)
+
+(defn image-descriptor [filename]
+  (let [mag-value (vals (edge-magnitude-hist filename))
+        dir-value (vals (edge-direction-hist filename))
+        int-value (vals (intensity-hist filename))]
+    (vec (concat mag-value dir-value int-value))
+  )
+)
+
+
+;;====================================
+;;Part 4
+;;====================================
+(comment "
+  Old version
+(defn image-similarity [filename1 filename2]
+  (let [des1 (image-descriptor filename1)
+        des2 (image-descriptor filename2)]
+    (loop [result 0
+           adding1 des1
+           adding2 des2]
+      (if (empty? adding1)
+        (/ result 3.0)
+        (recur (+ result (min (first adding1) (first adding2)))
+               (rest adding1)
+               (rest adding2)
+        )
+      )
+    )
+  )
+)
+")
+
+
+(defn image-similarity [filename1 filename2]
+  (let [des1 (image-descriptor filename1)
+        des2 (image-descriptor filename2)]
+    (/ (apply + (map min des1 des2)) 3.0)
+  )
+)
+
+
+(defn two-vec-muladd [grey-vec filter-vec]
+  (when (= (count grey-vec) (count filter-vec))
+      (loop [result 0
+             processing-vec1 grey-vec
+             processing-vec2 filter-vec]
+        (if (empty? processing-vec1)
+          result
+          (recur (if (nil? (first processing-vec1))
+                   result
+                   (+ result (* (first processing-vec1) (first processing-vec2)))
+                 )
+                 (rest processing-vec1)
+                 (rest processing-vec2)
+          )
+        )
+      )
+  )
+)
+
+(defn linear-blur-po [ori-image re-image x y]
+  (let [grey-matrix [(get-grey ori-image (- x 1) (- y 1))
+                     (get-grey ori-image x (- y 1))
+                     (get-grey ori-image (+ x 1) (- y 1))
+                     (get-grey ori-image (- x 1) y)
+                     (get-grey ori-image x y)
+                     (get-grey ori-image (+ x 1) y)
+                     (get-grey ori-image (- x 1) (+ y 1))
+                     (get-grey ori-image x (+ y 1))
+                     (get-grey ori-image (+ x 1) (+ y 1))]
+        grey  (int (two-vec-muladd grey-matrix [1/9 1/9 1/9 1/9 1/9 1/9 1/9 1/9 1/9]))]
+    (set-grey re-image x y grey)
+    re-image
+  )
+)
+
+(defn blur [filename]
+  (let [image (read-image filename)
+         return-image (new-image (get-width image)(get-height image))]
+    (dotimes [x (get-width image)]
+      (dotimes [y (get-height image)]
+        (linear-blur-po image return-image x y)
+      )
+    )
+    return-image
+  )
+)
+
+(defn smooth-po [ori-image re-image x y]
+  (let [grey-matrix [(get-grey ori-image (- x 1) (- y 1))
+                     (get-grey ori-image x (- y 1))
+                     (get-grey ori-image (+ x 1) (- y 1))
+                     (get-grey ori-image (- x 1) y)
+                     (get-grey ori-image x y)
+                     (get-grey ori-image (+ x 1) y)
+                     (get-grey ori-image (- x 1) (+ y 1))
+                     (get-grey ori-image x (+ y 1))
+                     (get-grey ori-image (+ x 1) (+ y 1))]
+        grey (int (two-vec-muladd grey-matrix [0.075 0.125 0.075 0.125 0.2 0.125 0.075 0.125 0.075]))]
+    (set-grey re-image x y grey)
+    re-image
+  )
+)
+
+(defn smooth [filename]
+  (let [image (read-image filename)
+         return-image (new-image (get-width image)(get-height image))]
+    (dotimes [x (get-width image)]
+      (dotimes [y (get-height image)]
+        (smooth-po image return-image x y)
+      )
+    )
+    return-image
+  )
+)
+
+(defn laplace-po [ori-image re-image x y]
+  (let [grey-matrix [(get-grey ori-image (- x 1) (- y 1))
+                     (get-grey ori-image x (- y 1))
+                     (get-grey ori-image (+ x 1) (- y 1))
+                     (get-grey ori-image (- x 1) y)
+                     (get-grey ori-image x y)
+                     (get-grey ori-image (+ x 1) y)
+                     (get-grey ori-image (- x 1) (+ y 1))
+                     (get-grey ori-image x (+ y 1))
+                     (get-grey ori-image (+ x 1) (+ y 1))]
+        grey (int (two-vec-muladd grey-matrix [0.25 0.5 0.25 0.5 -3 0.5 0.25 0.5 0.25]))]
+    (set-grey re-image x y grey)
+    re-image
+  )
+)
+
+(defn laplace [filename]
+  (let [image (read-image filename)
+         return-image (new-image (get-width image)(get-height image))]
+    (dotimes [x (get-width image)]
+      (dotimes [y (get-height image)]
+        (smooth-po image return-image x y)
+      )
+    )
+    return-image
+  )
+)
+
+(defn Q123 [image]
+  (let [pixels (atom [])]
+    (dotimes [x (get-width image)]
+      (dotimes [y (get-height image)]
+        (swap! pixels conj (get-grey image x y))
+      )
+    )
+    [(nth (sort (remove nil? @pixels)) (int (* (count @pixels) 0.25)))
+     (nth (sort (remove nil? @pixels)) (int (* (count @pixels) 0.5)))
+     (nth (sort (remove nil? @pixels)) (int (* (count @pixels) 0.75)))
+     ]
+  )
+)
+
+
+(defn threshold-po [image re-image x y q1 q2 q3]
+  (let [greyscale (get-grey image x y)]
+    (cond
+      (nil? greyscale) (set-grey re-image x y q1)
+      (< greyscale q2) (set-grey re-image x y q1)
+      (> greyscale q2) (set-grey re-image x y q3)
+      :else (set-grey re-image x y q1)
+    )
+    re-image
+  )
+)
+
+(defn threshold [filename]
+  (let [image (read-image filename)
+        return-image (new-image (get-width image)(get-height image))
+        Q123-value (Q123 image)]
+    (dotimes [x (get-width image)]
+      (dotimes [y (get-height image)]
+        (threshold-po image return-image x y (first Q123-value) (second Q123-value) (last Q123-value))
+      )
+    )
+    return-image
+  )
+)
+
+;(image-descriptor "resources/car1.jpg")
+;(image-descriptor "0.jpg")
+;(image-descriptor "1.jpg")
+
+(image-similarity "resources/car1.jpg" "resources/car2.jpg")
+;(image-descriptor "resources/pikachu.jpg")
+;(int (/ (mag-po (read-image "resources/car1.jpg") 312 301) 32))
+;(dir-po (read-image "resources/car1.jpg") 0 0)
+;(edge-magnitude-hist "resources/pikachu.jpg")
+;(edge-direction-hist "resources/pikachu.jpg")
+;(intensity-hist "resources/pikachu.jpg")
+
+(comment "
+(defn try-read-grey [filename x y]
+  (let [image (read-image filename)]
+    (get-grey image x y)
+  )
+)
+
+;(try-read-grey "resources/car1.jpg" 100 221)
+")
+
+(comment "
+(defn apply-filter [grey-vec filter-vec]
+  (when (= (count grey-vec) (count filter-vec))
+    (loop [result-vec []
+           processing-vec1 grey-vec
+           processing-vec2 filter-vec]
+      (if (empty? processing-vec1)
+        (apply max result-vec)
+        (recur (if (nil? (first processing-vec1))
+                 result
+                 (conj result (* (first processing-vec1) (first processing-vec2)))
+               )
+               (rest processing-vec1)
+               (rest processing-vec2)
+        )
+      )
+    )
+  )
+)
+")
+
+;(two-vec-muladd [nil nil nil 1 2 3] [2 3 4 4 5 6])
+;(save-image (kirsh "resources/1.jpg" 0) "jpg" "0.jpg")
+;(save-image (kirsh "resources/1.jpg" 1) "jpg" "1.jpg")
+;(save-image (kirsh "resources/1.jpg" 2) "jpg" "2.jpg")
+;(save-image (kirsh "resources/1.jpg" 3) "jpg" "3.jpg")
+;(save-image (kirsh "resources/1.jpg" 4) "jpg" "4.jpg")
+;(save-image (kirsh "resources/1.jpg" 5) "jpg" "5.jpg")
+;(save-image (kirsh "resources/1.jpg" 6) "jpg" "6.jpg")
+;(save-image (kirsh "resources/1.jpg" 7) "jpg" "7.jpg")
+;(save-image (blur "resources/car1.jpg" ) "jpg" "0.jpg")
+;(save-image (smooth "resources/car1.jpg") "jpg" "1.jpg")
+;(save-image (laplace "resources/car1.jpg") "jpg" "2.jpg")
+;(save-image (threshold "resources/car1.jpg") "jpg" "3.jpg")
+
+(defn -main
+  "I don't do a whole lot ... yet."
+  [& args]
+  (println "Hello, World!"))
+=======
+(ns as3.core
+  (:gen-class)
+  (:import [java.awt.image BufferedImage])
+  (:import [javax.imageio ImageIO])
+  (:import [java.io File])
+)
+
+;;A simple method to reload the project in the repl
+(defn reload []
+  (use 'as2.core :reload)
+  :RELOADED!
+)
+
+(def kirsh-filters [
+                     [[-1 0 1][-2 0 2][-1 0 1]]
+                     [[-2 -1 0][-1 0 1][0 1 2]]
+                     [[-1 -2 -1][0 0 0][1 2 1]]
+                     [[0 -1 -2][1 0 -1][2 1 0]]
+                     [[1 0 -1][2 0 -2][1 0 -1]]
+                     [[2 1 0][1 0 -1][0 -1 -2]]
+                     [[1 2 1][0 0 0][-1 -2 -1]]
+                     [[0 1 2][-1 0 1][-2 -1 0]]
+                   ])
+
+
+(defn new-image [width height]
+  (BufferedImage. width height BufferedImage/TYPE_INT_RGB)
+)
+
+(defn get-matrix-item [matrix row col]
+  (get-in matrix [row col])
+)
+
+(defn get-width [image]
+  (.getWidth image)
+)
+
+(defn get-height [image]
+  (.getHeight image)
+)
+
+(defn read-image [filename]
+  (let [file (File. filename)]
+    (ImageIO/read file)
+  )
+)
+
+(defn save-image [image extension filename]
+  (let [file (File. filename)]
+    (ImageIO/write image extension file)
+  )
+)
+
+(defn get-rgb [image x y]
+  (if (and (and (and (> x 0) (> y 0)) (< x (get-width image))) (< y (get-height image)))
+    (let [rgb (.getRGB image x y)
+          red (bit-shift-right (bit-and rgb 0xFF0000) 16)
+          blue (bit-shift-right (bit-and rgb 0xFF00) 8)
+          green (bit-and rgb 0xFF)]
+      (vec (list red green blue))
+    )
+    nil
+  )
+)
+
+
+(defn set-rgb
+  "Function to set the RGB components of a pixel."
+  [image x y [red green blue]]
+     (let [rgb (+ (bit-shift-left red 16)
+                  (bit-shift-left blue 8)
+                  (bit-shift-left green 0) ) ]
+       (.setRGB image x y rgb)
+   )
+)
+
+(defn get-grey [image x y]
+  "Use average method to calculate greyscale"
+  (let [rgb (get-rgb image x y)]
+    (if (not (nil? rgb))
+      (int (/ ( reduce + rgb ) 3.0))
+      nil
+    )
+  )
+)
+
+;(get-grey (read-image "resources/pikachu.jpg") (inc (get-width (read-image "resources/pikachu.jpg"))) 0)
+
+(defn set-grey
+  "Function to set the grey value of a pixel."
+  [image x y grey]
+   (set-rgb image x y [grey grey grey])
+)
+
+(defn two-vec-muladd [grey-vec filter-vec]
+  (when (= (count grey-vec) (count filter-vec))
+      (loop [result 0
+             processing-vec1 grey-vec
+             processing-vec2 filter-vec]
+        (if (empty? processing-vec1)
+          result
+          (recur (if (nil? (first processing-vec1))
+                   result
+                   (+ result (* (first processing-vec1) (first processing-vec2)))
+                 )
+                 (rest processing-vec1)
+                 (rest processing-vec2)
+          )
+        )
+      )
+  )
+)
+
+(defn linear-blur-po [ori-image re-image x y]
+  (let [grey-matrix [(get-grey ori-image (- x 1) (- y 1))
+                     (get-grey ori-image x (- y 1))
+                     (get-grey ori-image (+ x 1) (- y 1))
+                     (get-grey ori-image (- x 1) y)
+                     (get-grey ori-image x y)
+                     (get-grey ori-image (+ x 1) y)
+                     (get-grey ori-image (- x 1) (+ y 1))
+                     (get-grey ori-image x (+ y 1))
+                     (get-grey ori-image (+ x 1) (+ y 1))]
+        grey  (int (two-vec-muladd grey-matrix [1/9 1/9 1/9 1/9 1/9 1/9 1/9 1/9 1/9]))]
+    (set-grey re-image x y grey)
+    re-image
+  )
+)
+
+(defn blur [filename]
+  (let [image (read-image filename)
+         return-image (new-image (get-width image)(get-height image))]
+    (dotimes [x (get-width image)]
+      (dotimes [y (get-height image)]
+        (linear-blur-po image return-image x y)
+      )
+    )
+    return-image
+  )
+)
+
+(defn smooth-po [ori-image re-image x y]
+  (let [grey-matrix [(get-grey ori-image (- x 1) (- y 1))
+                     (get-grey ori-image x (- y 1))
+                     (get-grey ori-image (+ x 1) (- y 1))
+                     (get-grey ori-image (- x 1) y)
+                     (get-grey ori-image x y)
+                     (get-grey ori-image (+ x 1) y)
+                     (get-grey ori-image (- x 1) (+ y 1))
+                     (get-grey ori-image x (+ y 1))
+                     (get-grey ori-image (+ x 1) (+ y 1))]
+        grey (int (two-vec-muladd grey-matrix [0.075 0.125 0.075 0.125 0.2 0.125 0.075 0.125 0.075]))]
+    (set-grey re-image x y grey)
+    re-image
+  )
+)
+
+(defn smooth [filename]
+  (let [image (read-image filename)
+         return-image (new-image (get-width image)(get-height image))]
+    (dotimes [x (get-width image)]
+      (dotimes [y (get-height image)]
+        (smooth-po image return-image x y)
+      )
+    )
+    return-image
+  )
+)
+
+(defn laplace-po [ori-image re-image x y]
+  (let [grey-matrix [(get-grey ori-image (- x 1) (- y 1))
+                     (get-grey ori-image x (- y 1))
+                     (get-grey ori-image (+ x 1) (- y 1))
+                     (get-grey ori-image (- x 1) y)
+                     (get-grey ori-image x y)
+                     (get-grey ori-image (+ x 1) y)
+                     (get-grey ori-image (- x 1) (+ y 1))
+                     (get-grey ori-image x (+ y 1))
+                     (get-grey ori-image (+ x 1) (+ y 1))]
+        grey (int (two-vec-muladd grey-matrix [0.25 0.5 0.25 0.5 -3 0.5 0.25 0.5 0.25]))]
+    (set-grey re-image x y grey)
+    re-image
+  )
+)
+
+(defn laplace [filename]
+  (let [image (read-image filename)
+         return-image (new-image (get-width image)(get-height image))]
+    (dotimes [x (get-width image)]
+      (dotimes [y (get-height image)]
+        (smooth-po image return-image x y)
+      )
+    )
+    return-image
+  )
+)
+
+(defn IRQ [image]
+  (let [pixels (atom [])]
+    (dotimes [x (get-width image)]
+      (dotimes [y (get-height image)]
+        (swap! pixels conj (get-grey image x y))
+      )
+    )
+    [(nth (sort (remove nil? @pixels)) (int (* (count @pixels) 0.25)))
+     (nth (sort (remove nil? @pixels)) (int (* (count @pixels) 0.5)))
+     (nth (sort (remove nil? @pixels)) (int (* (count @pixels) 0.75)))
+     ]
+  )
+)
+
+(IRQ (read-image "resources/car1.jpg"))
+
+(defn threshold-po [image re-image x y irq1 irq2 irq3]
+  (let [greyscale (get-grey image x y)]
+    (cond
+      (nil? greyscale) (set-grey re-image x y irq1)
+      (< greyscale irq2) (set-grey re-image x y irq1)
+      (> greyscale irq2) (set-grey re-image x y irq3)
+      :else (set-grey re-image x y irq1)
+    )
+    re-image
+  )
+)
+
+(defn threshold [filename]
+  (let [image (read-image filename)
+        return-image (new-image (get-width image)(get-height image))
+        IRQ-value (IRQ image)]
+    (dotimes [x (get-width image)]
+      (dotimes [y (get-height image)]
+        (threshold-po image return-image x y (first IRQ-value) (second IRQ-value) (last IRQ-value))
+      )
+    )
+    return-image
+  )
+)
+
+(defn kirsh-filter-po [ori-image re-image k-filter x y]
+  (let [grey-matrix [(get-grey ori-image (- x 1) (- y 1))
+                     (get-grey ori-image x (- y 1))
+                     (get-grey ori-image (+ x 1) (- y 1))
+                     (get-grey ori-image (- x 1) y)
+                     (get-grey ori-image x y)
+                     (get-grey ori-image (+ x 1) y)
+                     (get-grey ori-image (- x 1) (+ y 1))
+                     (get-grey ori-image x (+ y 1))
+                     (get-grey ori-image (+ x 1) (+ y 1))]
+        greyscale (+ 127 (two-vec-muladd grey-matrix (flatten k-filter)))]
+    ;Clampping grey value
+    (cond
+      (< greyscale 0) (set-grey re-image x y 0)
+      (> greyscale 255) (set-grey re-image x y 255)
+      :else (set-grey re-image x y greyscale)
+    )
+    re-image
+  )
+)
+
+(defn kirsh-filter [image k-filter]
+  (let [return-image (new-image (get-width image) (get-height image))]
+    (dotimes [x (get-width image)]
+      (dotimes [y (get-height image)]
+        (kirsh-filter-po image return-image k-filter x y)
+      )
+    )
+    return-image
+  )
+)
+
+(defn kirsh [file i]
+  (let [image (read-image file)]
+    (kirsh-filter image (nth kirsh-filters i))
+  )
+)
+
+(defn mag-po [ori-image x y]
+  (let [grey-matrix [(get-grey ori-image (- x 1) (- y 1))
+                     (get-grey ori-image x (- y 1))
+                     (get-grey ori-image (+ x 1) (- y 1))
+                     (get-grey ori-image (- x 1) y)
+                     (get-grey ori-image x y)
+                     (get-grey ori-image (+ x 1) y)
+                     (get-grey ori-image (- x 1) (+ y 1))
+                     (get-grey ori-image x (+ y 1))
+                     (get-grey ori-image (+ x 1) (+ y 1))]]
+    (loop [results []
+           processing-vec kirsh-filters]
+      (if (empty? processing-vec)
+        (cond
+          (< (apply max results) 0) 0
+          (> (apply max results) 255) 255
+          :else (apply max results)
+        )
+        (recur
+               (conj results (+ 127 (two-vec-muladd grey-matrix (flatten (first processing-vec)))))
+               (rest processing-vec)
+        )
+      )
+    )
+  )
+)
+
+(defn dir-po [ori-image x y]
+  (let [grey-matrix [(get-grey ori-image (- x 1) (- y 1))
+                     (get-grey ori-image x (- y 1))
+                     (get-grey ori-image (+ x 1) (- y 1))
+                     (get-grey ori-image (- x 1) y)
+                     (get-grey ori-image x y)
+                     (get-grey ori-image (+ x 1) y)
+                     (get-grey ori-image (- x 1) (+ y 1))
+                     (get-grey ori-image x (+ y 1))
+                     (get-grey ori-image (+ x 1) (+ y 1))]]
+    (loop [results []
+           processing-vec kirsh-filters]
+      (if (empty? processing-vec)
+        (.indexOf results (apply max results))
+        (recur
+               (conj results (+ 127 (two-vec-muladd grey-matrix (flatten (first processing-vec)))))
+               (rest processing-vec)
+        )
+      )
+    )
+  )
+)
+
+(defn edge-magnitude-hist [filename]
+  (let [
+        image (read-image filename)
+        v0 (atom 0.0)
+        v1 (atom 0.0)
+        v2 (atom 0.0)
+        v3 (atom 0.0)
+        v4 (atom 0.0)
+        v5 (atom 0.0)
+        v6 (atom 0.0)
+        v7 (atom 0.0)]
+    (dotimes [x (get-width image)]
+      (dotimes [y (get-height image)]
+       (let [current-counting (int (/ (mag-po image x y) 32))]
+         (case current-counting
+           0 (swap! v0 inc)
+           1 (swap! v1 inc)
+           2 (swap! v2 inc)
+           3 (swap! v3 inc)
+           4 (swap! v4 inc)
+           5 (swap! v5 inc)
+           6 (swap! v6 inc)
+           7 (swap! v7 inc)
+         )
+       )
+      )
+    )
+    (let [total-pixels (+ @v0 @v1 @v2 @v3 @v4 @v5 @v6 @v7)]
+      {:0-31 (Double. (format "%.2f" (/ @v0 total-pixels)))
+       :32-63 (Double. (format "%.2f" (/ @v1 total-pixels)))
+       :64-95 (Double. (format "%.2f" (/ @v2 total-pixels)))
+       :96-127 (Double. (format "%.2f" (/ @v3 total-pixels)))
+       :128-159 (Double. (format "%.2f" (/ @v4 total-pixels)))
+       :160-191 (Double. (format "%.2f" (/ @v5 total-pixels)))
+       :192-223 (Double. (format "%.2f" (/ @v6 total-pixels)))
+       :224-255 (Double. (format "%.2f" (/ @v7 total-pixels)))}
+    )
+  )
+)
+
+(defn edge-direction-hist [filename]
+  (let [image (read-image filename)
+        v0 (atom 0.0)
+        v1 (atom 0.0)
+        v2 (atom 0.0)
+        v3 (atom 0.0)
+        v4 (atom 0.0)
+        v5 (atom 0.0)
+        v6 (atom 0.0)
+        v7 (atom 0.0)]
+    (dotimes [x (get-width image)]
+      (dotimes [y (get-height image)]
+       (let [current-counting (dir-po image x y)]
+         (case current-counting
+           0 (swap! v0 inc)
+           1 (swap! v1 inc)
+           2 (swap! v2 inc)
+           3 (swap! v3 inc)
+           4 (swap! v4 inc)
+           5 (swap! v5 inc)
+           6 (swap! v6 inc)
+           7 (swap! v7 inc)
+         )
+       )
+      )
+    )
+    (let [total-pixels (+ @v0 @v1 @v2 @v3 @v4 @v5 @v6 @v7)]
+      {:0 (Double. (format "%.2f" (/ @v0 total-pixels)))
+       :1 (Double. (format "%.2f" (/ @v1 total-pixels)))
+       :2 (Double. (format "%.2f" (/ @v2 total-pixels)))
+       :3 (Double. (format "%.2f" (/ @v3 total-pixels)))
+       :4 (Double. (format "%.2f" (/ @v4 total-pixels)))
+       :5 (Double. (format "%.2f" (/ @v5 total-pixels)))
+       :6 (Double. (format "%.2f" (/ @v6 total-pixels)))
+       :7 (Double. (format "%.2f" (/ @v7 total-pixels)))}
+    )
+  )
+)
+
+(defn intensity-hist [filename]
+  (let [image (read-image filename)
+        v0 (atom 0.0)
+        v1 (atom 0.0)
+        v2 (atom 0.0)
+        v3 (atom 0.0)
+        v4 (atom 0.0)
+        v5 (atom 0.0)
+        v6 (atom 0.0)
+        v7 (atom 0.0)]
+    (dotimes [x (get-width image)]
+      (dotimes [y (get-height image)]
+        (let [current-counting (if-not (nil? (get-grey image x y))
+                                 (int (/ (get-grey image x y) 32))
+                                 -1
+                                )]
+          (case current-counting
+            0 (swap! v0 inc)
+            1 (swap! v1 inc)
+            2 (swap! v2 inc)
+            3 (swap! v3 inc)
+            4 (swap! v4 inc)
+            5 (swap! v5 inc)
+            6 (swap! v6 inc)
+            7 (swap! v7 inc)
+            -1
+          )
+        )
+      )
+    )
+    (let [total-pixels (+ @v0 @v1 @v2 @v3 @v4 @v5 @v6 @v7)]
+      {:0-31 (Double. (format "%.2f" (/ @v0 total-pixels)))
+       :32-63 (Double. (format "%.2f" (/ @v1 total-pixels)))
+       :64-95 (Double. (format "%.2f" (/ @v2 total-pixels)))
+       :96-127 (Double. (format "%.2f" (/ @v3 total-pixels)))
+       :128-159 (Double. (format "%.2f" (/ @v4 total-pixels)))
+       :160-191 (Double. (format "%.2f" (/ @v5 total-pixels)))
+       :192-223 (Double. (format "%.2f" (/ @v6 total-pixels)))
+       :224-255 (Double. (format "%.2f" (/ @v7 total-pixels)))}
+    )
+  )
+)
+
+(defn image-descriptor [filename]
+  (let [mag-value (vals (edge-magnitude-hist filename))
+        dir-value (vals (edge-direction-hist filename))
+        int-value (vals (intensity-hist filename))]
+    (vec (concat mag-value dir-value int-value))
+  )
+)
+
+(defn image-similarity [filename1 filename2]
+  (let [des1 (image-descriptor filename1)
+        des2 (image-descriptor filename2)]
+    (loop [result 0
+           adding1 des1
+           adding2 des2]
+      (if (empty? adding1)
+        (/ result 3.0)
+        (recur (+ result (min (first adding1) (first adding2)))
+               (rest adding1)
+               (rest adding2)
+        )
+      )
+    )
+  )
+)
+
+;(image-descriptor "resources/car1.jpg")
+;(image-descriptor "0.jpg")
+;(image-descriptor "1.jpg")
+
+;(image-similarity "resources/car1.jpg" "resources/car2.jpg")
+;(image-descriptor "resources/pikachu.jpg")
+;(int (/ (mag-po (read-image "resources/car1.jpg") 312 301) 32))
+;(dir-po (read-image "resources/car1.jpg") 0 0)
+;(edge-magnitude-hist "resources/pikachu.jpg")
+;(edge-direction-hist "resources/pikachu.jpg")
+;(intensity-hist "resources/pikachu.jpg")
+
+(comment "
+(defn try-read-grey [filename x y]
+  (let [image (read-image filename)]
+    (get-grey image x y)
+  )
+)
+
+;(try-read-grey "resources/car1.jpg" 100 221)
+")
+
+(comment "
+(defn apply-filter [grey-vec filter-vec]
+  (when (= (count grey-vec) (count filter-vec))
+    (loop [result-vec []
+           processing-vec1 grey-vec
+           processing-vec2 filter-vec]
+      (if (empty? processing-vec1)
+        (apply max result-vec)
+        (recur (if (nil? (first processing-vec1))
+                 result
+                 (conj result (* (first processing-vec1) (first processing-vec2)))
+               )
+               (rest processing-vec1)
+               (rest processing-vec2)
+        )
+      )
+    )
+  )
+)
+")
+
+;(two-vec-muladd [nil nil nil 1 2 3] [2 3 4 4 5 6])
+;(save-image (kirsh "resources/1.jpg" 0) "jpg" "0.jpg")
+;(save-image (kirsh "resources/1.jpg" 1) "jpg" "1.jpg")
+;(save-image (kirsh "resources/1.jpg" 2) "jpg" "2.jpg")
+;(save-image (kirsh "resources/1.jpg" 3) "jpg" "3.jpg")
+;(save-image (kirsh "resources/1.jpg" 4) "jpg" "4.jpg")
+;(save-image (kirsh "resources/1.jpg" 5) "jpg" "5.jpg")
+;(save-image (kirsh "resources/1.jpg" 6) "jpg" "6.jpg")
+;(save-image (kirsh "resources/1.jpg" 7) "jpg" "7.jpg")
+;(save-image (blur "resources/car1.jpg" ) "jpg" "0.jpg")
+;(save-image (smooth "resources/car1.jpg") "jpg" "1.jpg")
+;(save-image (laplace "resources/car1.jpg") "jpg" "2.jpg")
+;(save-image (threshold "resources/car1.jpg") "jpg" "3.jpg")
+
+(defn -main
+  "I don't do a whole lot ... yet."
+  [& args]
+  (println "Hello, World!"))
+>>>>>>> f9d27956123baf768074466b6651661af3e02abc
