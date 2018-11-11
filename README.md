@@ -1,6 +1,6 @@
 # UoW-COMP316
 
-Welcome to my repo of [COMP316 - Artificial Intelligence Techniques and Applications](https://paperoutlines.waikato.ac.nz/outline/COMP316-18A%20(HAM)). This paper is taught at [University of Waikato](https://www.waikato.ac.nz/). This repo recorded all my work for this paper.
+Welcome to my repo of [COMP316 - Artificial Intelligence Techniques and Applications](https://paperoutlines.waikato.ac.nz/outline/COMP316-18A%20(HAM)). This paper is taught at [University of Waikato](https://www.waikato.ac.nz/). This repo recorded my work for this paper.
 
 
 
