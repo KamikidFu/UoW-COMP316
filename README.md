@@ -32,8 +32,6 @@ I would like to hear from you if there is any bugs you found out! Just report bu
 
 ## About
 
-In order to reduce the size of repo, only the source codes will be committed. It contains each week exercises though out this paper.
-
 Since this repo is for school work. You are welcome to use this repo as a reference but **DO NOT** just copy and paste. You may not learn something from courses and may face serious problem of plagiarism.
 
 Enjoy!
